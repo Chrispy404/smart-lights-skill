@@ -60,12 +60,40 @@ Set brightness for a specific room:
 ./scripts/hue-control/hue-control set --room "Living Room" --brightness 75
 ```
 
+### Set Light Color
+
+Use preset colors:
+```bash
+./scripts/hue-control/hue-control set --color blue
+./scripts/hue-control/hue-control set --color warm --brightness 60
+```
+
+Available presets: `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple`, `pink`, `warm`, `cool`, `white`
+
+Or use precise hue/saturation values:
+```bash
+./scripts/hue-control/hue-control set --hue 46920 --sat 254  # Blue
+```
+
 ### Turn All Lights On/Off
 
 ```bash
 ./scripts/hue-control/hue-control on
 ./scripts/hue-control/hue-control off
 ```
+
+### Weather-Based Lighting
+
+Automatically set light colors based on current weather:
+```bash
+./scripts/weather-lights/weather-lights
+```
+
+Options:
+- `--location "City"` - Specify location (default: auto-detect)
+- `--room "Room"` - Target specific room
+- `--brightness 80` - Set brightness (default: 80)
+- `--dry-run` - Preview without changes
 
 ## Parameters
 

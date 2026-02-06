@@ -8,4 +8,12 @@ echo "Building hue-control..."
 go build -o hue-control .
 chmod +x hue-control
 
-echo "Build complete: $SCRIPT_DIR/hue-control/hue-control"
+cd "$SCRIPT_DIR/weather-lights"
+
+echo "Building weather-lights..."
+go build -o weather-lights .
+chmod +x weather-lights
+
+echo "Build complete:"
+echo "  - $SCRIPT_DIR/hue-control/hue-control"
+echo "  - $SCRIPT_DIR/weather-lights/weather-lights"

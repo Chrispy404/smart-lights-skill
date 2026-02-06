@@ -35,6 +35,24 @@ type Group struct {
 type GroupState struct {
 	On  bool `json:"on"`
 	Bri int  `json:"bri,omitempty"`
+	Hue int  `json:"hue,omitempty"`
+	Sat int  `json:"sat,omitempty"`
+}
+
+// ColorPreset maps color names to Hue and Saturation values
+var ColorPresets = map[string][2]int{
+	// Format: "name": {hue (0-65535), saturation (0-254)}
+	"red":    {0, 254},
+	"orange": {5000, 254},
+	"yellow": {10000, 254},
+	"green":  {25500, 254},
+	"cyan":   {35000, 254},
+	"blue":   {46920, 254},
+	"purple": {50000, 254},
+	"pink":   {56100, 254},
+	"warm":   {8000, 200}, // Warm white
+	"cool":   {34000, 50}, // Cool white
+	"white":  {0, 0},      // Pure white (no color)
 }
 
 // Light represents a Hue light
@@ -92,8 +110,11 @@ Commands:
   help        Show this help message
 
 Set Command Options:
-  --room <name>       Room name to control (default: "all")
+  --room <name>        Room name to control (default: "all")
   --brightness <0-100> Brightness percentage (default: 100)
+  --hue <0-65535>      Hue value for color (optional)
+  --sat <0-254>        Saturation value for color (optional)
+  --color <name>       Color preset: red, orange, yellow, green, cyan, blue, purple, pink, warm, cool, white
 
 Configuration:
   Authentication defaults to reading from a .env file or environment variables:
@@ -104,7 +125,9 @@ Examples:
   hue-control setup
   hue-control list
   hue-control set --brightness 50
-  hue-control set --room "Living Room" --brightness 75`)
+  hue-control set --room "Living Room" --brightness 75
+  hue-control set --color blue
+  hue-control set --room "Bedroom" --color warm --brightness 60`)
 }
 
 func loadConfig() (*Config, error) {
@@ -294,11 +317,42 @@ func runSet() {
 	setCmd := flag.NewFlagSet("set", flag.ExitOnError)
 	room := setCmd.String("room", "all", "Room name to control")
 	brightness := setCmd.Int("brightness", 100, "Brightness percentage (0-100)")
+	hueVal := setCmd.Int("hue", -1, "Hue value (0-65535)")
+	satVal := setCmd.Int("sat", -1, "Saturation value (0-254)")
+	colorName := setCmd.String("color", "", "Color preset name")
 	setCmd.Parse(os.Args[2:])
 
 	if *brightness < 0 || *brightness > 100 {
 		fmt.Println("Error: Brightness must be between 0 and 100")
 		os.Exit(1)
+	}
+
+	// Resolve color preset
+	var finalHue, finalSat int = -1, -1
+	if *colorName != "" {
+		preset, ok := ColorPresets[strings.ToLower(*colorName)]
+		if !ok {
+			fmt.Printf("Error: Unknown color '%s'. Available: red, orange, yellow, green, cyan, blue, purple, pink, warm, cool, white\n", *colorName)
+			os.Exit(1)
+		}
+		finalHue = preset[0]
+		finalSat = preset[1]
+	}
+
+	// Override with explicit hue/sat if provided
+	if *hueVal >= 0 {
+		if *hueVal > 65535 {
+			fmt.Println("Error: Hue must be between 0 and 65535")
+			os.Exit(1)
+		}
+		finalHue = *hueVal
+	}
+	if *satVal >= 0 {
+		if *satVal > 254 {
+			fmt.Println("Error: Saturation must be between 0 and 254")
+			os.Exit(1)
+		}
+		finalSat = *satVal
 	}
 
 	config, err := loadConfig()
@@ -314,9 +368,9 @@ func runSet() {
 	}
 
 	if strings.ToLower(*room) == "all" {
-		err = setAllLights(config, true, hueBrightness)
+		err = setAllLights(config, true, hueBrightness, finalHue, finalSat)
 	} else {
-		err = setRoomBrightness(config, *room, hueBrightness)
+		err = setRoomState(config, *room, hueBrightness, finalHue, finalSat)
 	}
 
 	if err != nil {
@@ -324,11 +378,16 @@ func runSet() {
 		os.Exit(1)
 	}
 
-	if strings.ToLower(*room) == "all" {
-		fmt.Printf("Set all lights to %d%% brightness\n", *brightness)
-	} else {
-		fmt.Printf("Set %s to %d%% brightness\n", *room, *brightness)
+	// Build output message
+	msg := fmt.Sprintf("Set %s to %d%% brightness", *room, *brightness)
+	if finalHue >= 0 || finalSat >= 0 {
+		if *colorName != "" {
+			msg += fmt.Sprintf(" with color '%s'", *colorName)
+		} else {
+			msg += fmt.Sprintf(" with hue=%d sat=%d", finalHue, finalSat)
+		}
 	}
+	fmt.Println(msg)
 }
 
 func runOn() {
@@ -338,7 +397,7 @@ func runOn() {
 		os.Exit(1)
 	}
 
-	if err := setAllLights(config, true, 254); err != nil {
+	if err := setAllLights(config, true, 254, -1, -1); err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -353,7 +412,7 @@ func runOff() {
 		os.Exit(1)
 	}
 
-	if err := setAllLights(config, false, 0); err != nil {
+	if err := setAllLights(config, false, 0, -1, -1); err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -361,7 +420,7 @@ func runOff() {
 	fmt.Println("All lights turned off")
 }
 
-func setAllLights(config *Config, on bool, brightness int) error {
+func setAllLights(config *Config, on bool, brightness int, hue int, sat int) error {
 	groups, err := getGroups(config)
 	if err != nil {
 		return err
@@ -378,6 +437,12 @@ func setAllLights(config *Config, on bool, brightness int) error {
 	}
 	if on && brightness > 0 {
 		state["bri"] = brightness
+	}
+	if hue >= 0 {
+		state["hue"] = hue
+	}
+	if sat >= 0 {
+		state["sat"] = sat
 	}
 
 	jsonBody, _ := json.Marshal(state)
@@ -404,7 +469,7 @@ func setAllLights(config *Config, on bool, brightness int) error {
 	return nil
 }
 
-func setRoomBrightness(config *Config, roomName string, brightness int) error {
+func setRoomState(config *Config, roomName string, brightness int, hue int, sat int) error {
 	groups, err := getGroups(config)
 	if err != nil {
 		return err
@@ -429,6 +494,12 @@ func setRoomBrightness(config *Config, roomName string, brightness int) error {
 	state := map[string]interface{}{
 		"on":  true,
 		"bri": brightness,
+	}
+	if hue >= 0 {
+		state["hue"] = hue
+	}
+	if sat >= 0 {
+		state["sat"] = sat
 	}
 
 	jsonBody, _ := json.Marshal(state)
