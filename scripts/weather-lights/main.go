@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -123,16 +124,25 @@ func main() {
 		locationName = weather.NearestArea[0].AreaName[0].Value
 	}
 
-	// Determine color from weather code
-	color, ok := WeatherConditions[weatherCode]
+	// Determine base color from weather code
+	baseColor, ok := WeatherConditions[weatherCode]
 	if !ok {
-		color = "warm" // Default to warm if unknown
+		baseColor = "warm" // Default to warm if unknown
 	}
+
+	// Adjust color based on temperature
+	temp, _ := strconv.Atoi(current.TempC)
+	color := adjustColorByTemperature(baseColor, temp)
 
 	fmt.Printf("📍 Location: %s\n", locationName)
 	fmt.Printf("🌡️  Temperature: %s°C (feels like %s°C)\n", current.TempC, current.FeelsLikeC)
 	fmt.Printf("☁️  Condition: %s (code: %s)\n", weatherDesc, weatherCode)
-	fmt.Printf("💡 Setting lights to: %s at %d%% brightness\n", color, *brightness)
+	fmt.Printf("💡 Setting lights to: %s at %d%% brightness", color, *brightness)
+	if color != baseColor {
+		fmt.Printf(" (adjusted from %s due to temperature)\n", baseColor)
+	} else {
+		fmt.Println()
+	}
 
 	if *dryRun {
 		fmt.Println("\n[Dry run - no changes made]")
@@ -159,6 +169,53 @@ func main() {
 	if err := cmd.Run(); err != nil {
 		fmt.Printf("Error setting lights: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+// adjustColorByTemperature modifies the base color based on temperature
+func adjustColorByTemperature(baseColor string, tempC int) string {
+	// Temperature ranges influence color choice
+	switch {
+	case tempC < 0:
+		// Freezing: shift to cooler tones
+		if baseColor == "warm" || baseColor == "orange" {
+			return "cool" // Sunny but freezing = cool white
+		}
+		if baseColor == "yellow" {
+			return "cyan" // Warmer colors become cooler
+		}
+		return baseColor // Already cool colors stay
+
+	case tempC >= 0 && tempC < 10:
+		// Cold: slight cooling
+		if baseColor == "warm" {
+			return "white" // Sunny but cold = neutral white
+		}
+		return baseColor
+
+	case tempC >= 30 && tempC < 38:
+		// Hot: shift to warmer tones
+		if baseColor == "cool" || baseColor == "white" {
+			return "warm" // Cloudy but hot = warm
+		}
+		if baseColor == "warm" {
+			return "orange" // Make it warmer
+		}
+		return baseColor
+
+	case tempC >= 38:
+		// Very hot: maximum warm/orange
+		if baseColor == "cool" || baseColor == "white" || baseColor == "warm" {
+			return "orange"
+		}
+		if baseColor == "yellow" {
+			return "red" // Extreme heat
+		}
+		return baseColor
+
+	default:
+		// Moderate temps (10-30°C): use weather-based color as-is
+		return baseColor
 	}
 }
 
