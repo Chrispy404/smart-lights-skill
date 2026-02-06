@@ -27,3 +27,7 @@ vendor/
 # OS
 .DS_Store
 Thumbs.db
+
+# Compiled binaries
+scripts/hue-control/hue-control
+scripts/weather-lights/weather-lights
