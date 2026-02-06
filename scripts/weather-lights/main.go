@@ -176,7 +176,7 @@ func main() {
 func adjustColorByTemperature(baseColor string, tempC int) string {
 	// Temperature ranges influence color choice
 	switch {
-	case tempC < 0:
+	case tempC < 3:
 		// Freezing: shift to cooler tones
 		if baseColor == "warm" || baseColor == "orange" {
 			return "cool" // Sunny but freezing = cool white
@@ -186,7 +186,7 @@ func adjustColorByTemperature(baseColor string, tempC int) string {
 		}
 		return baseColor // Already cool colors stay
 
-	case tempC >= 0 && tempC < 10:
+	case tempC >= 3 && tempC < 10:
 		// Cold: slight cooling
 		if baseColor == "warm" {
 			return "white" // Sunny but cold = neutral white
